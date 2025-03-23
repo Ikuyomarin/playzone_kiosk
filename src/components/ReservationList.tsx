@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export function ReservationList() {
-  const [reservations, setReservations] = useState([]);
+    const [reservations, setReservations] = useState<any[]>([]);
+
 
   useEffect(() => {
     async function fetchReservations() {
