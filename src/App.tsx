@@ -1,10 +1,9 @@
-import { ReservationList } from "./components/ReservationList";
+import HomePage from "@/pages/home-page";
 
 function App() {
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>Supabase 예약 테스트</h1>
-      <ReservationList />
+    <div>
+      <HomePage />
     </div>
   );
 }
