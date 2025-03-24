@@ -30,30 +30,32 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ cell, onClose, onCo
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <h2>예약 정보 입력</h2>
-        <div className="form-group">
-          <label>예약자 이름:</label>
+      <div className="modal-content" style={{ padding: '2rem', maxWidth: '600px' }}>
+        <h2 style={{ fontSize: '2rem', marginBottom: '1.5rem' }}>예약 정보 입력</h2>
+        <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+          <label style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>예약자 이름:</label>
           <input 
             type="text" 
             value={name} 
             onChange={(e) => setName(e.target.value)}
             placeholder="예: 홍길동"
+            style={{ fontSize: '1.5rem', padding: '0.75rem', width: '100%' }}
           />
         </div>
-        <div className="form-group">
-          <label>인원수:</label>
+        <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+          <label style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>인원수:</label>
           <input 
             type="number" 
             value={people} 
             onChange={(e) => setPeople(Number(e.target.value))}
             min={1} 
             max={4}
+            style={{ fontSize: '1.5rem', padding: '0.75rem', width: '100%' }}
           />
         </div>
-        <div className="modal-buttons">
-          <button onClick={handleConfirm}>확인</button>
-          <button onClick={onClose}>취소</button>
+        <div className="modal-buttons" style={{ textAlign: 'center' }}>
+          <button onClick={handleConfirm} style={{ fontSize: '1.5rem', padding: '1rem 2rem', marginRight: '1rem' }}>확인</button>
+          <button onClick={onClose} style={{ fontSize: '1.5rem', padding: '1rem 2rem' }}>취소</button>
         </div>
       </div>
     </div>
