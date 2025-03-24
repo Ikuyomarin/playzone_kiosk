@@ -1,11 +1,12 @@
-import HomePage from "@/pages/home-page";
+import React from 'react';
+import ReservationGrid from './components/ReservationGrid';
 
-function App() {
+const App: React.FC = () => {
   return (
     <div>
-      <HomePage />
+      <ReservationGrid />
     </div>
   );
-}
+};
 
 export default App;
