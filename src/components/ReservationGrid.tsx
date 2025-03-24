@@ -290,6 +290,8 @@ const ReservationGrid: React.FC = () => {
       data.row = row;
       const key = `${row}-${col}`;
       setReservations(prev => ({ ...prev, [key]: data }));
+      // 예약 생성 후 바로 최신 예약 데이터를 불러와 UI를 업데이트합니다.
+      await fetchReservations();
       alert(`${programs[col]} 프로그램은 ${effectiveTime}에 예약되었습니다.\n예약자: ${maskName(name)}\n인원수: ${people}명`);
     }
     setSelectedCell(null);
