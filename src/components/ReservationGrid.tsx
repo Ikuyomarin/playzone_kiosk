@@ -113,12 +113,11 @@ const ReservationGrid: React.FC = () => {
     const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
     const lastReset = localStorage.getItem("lastResetDate");
 
-    // 날짜가 다르면 새벽을 넘겼다고 판단
     if (lastReset !== today) {
       const { error } = await supabase
         .from("reservations")
         .delete()
-        .neq("id", 0); // 전체 삭제
+        .neq("id", 0);
       if (!error) {
         localStorage.setItem("lastResetDate", today);
         console.log("자정이 지나 예약 데이터를 초기화했습니다.");
@@ -169,22 +168,27 @@ const ReservationGrid: React.FC = () => {
     }
   };
 
-  // 초기 실행 (컴포넌트 마운트 시)
+  // 컴포넌트 마운트 시 초기 데이터 로드 및 자정 체크
   useEffect(() => {
-    // 자정 체크 → 초기화
     resetReservationsIfNewDay();
-    // 예약 데이터, 비활성화 데이터 가져오기
     fetchReservations();
     fetchDisabledPrograms();
   }, []);
 
-  // 매 10초마다 재검사 → "자정 지나면" 체크 & 예약 목록 갱신
+  // Supabase Realtime 구독 설정 (예약 테이블의 변경 즉시 반영)
   useEffect(() => {
-    const interval = setInterval(() => {
-      resetReservationsIfNewDay(); // 자정 자동 초기화
-      fetchReservations();         // 최신 예약 정보 반영
-    }, 10000);
-    return () => clearInterval(interval);
+    const reservationSubscription = supabase
+      .from('reservations')
+      .on('*', payload => {
+        console.log('Realtime reservation change:', payload);
+        // 변경 이벤트가 발생하면 최신 데이터를 다시 불러옵니다.
+        fetchReservations();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeSubscription(reservationSubscription);
+    };
   }, []);
 
   // 1초마다 현재 시간 업데이트 (UI 표시용)
@@ -200,7 +204,7 @@ const ReservationGrid: React.FC = () => {
     return [parts[0], parts[1]];
   };
 
-  // merged 프로그램인 경우, 홀수 행을 상위 짝수 행에 붙여서 1시간 단위로 표현
+  // merged 프로그램인 경우, 홀수 행은 렌더링하지 않고 짝수 행으로 합칩니다.
   const getEffectiveTimeForCell = (row: number, col: number): string => {
     const program = programs[col];
     let adjustedRow = row;
@@ -223,7 +227,7 @@ const ReservationGrid: React.FC = () => {
     return name[0] + "*" + name[name.length - 1];
   };
 
-  // 이미 지난 시간인지 판단 (UI에 만료 표시)
+  // 지난 시간인지 판단 (UI에 만료 표시)
   const isExpired = (row: number, col: number): boolean => {
     const effectiveTime = getEffectiveTimeForCell(row, col);
     const [, endStr] = parseTimeRange(effectiveTime);
@@ -256,19 +260,17 @@ const ReservationGrid: React.FC = () => {
     setSelectedCell({ row: adjustedRow, col });
   };
 
-  // 예약 모달 확인 시
+  // 예약 모달 확인 시 (낙관적 업데이트)
   const handleReservationConfirm = async (name: string, people: number) => {
     if (!selectedCell) return;
     const { row, col } = selectedCell;
     const effectiveTime = getEffectiveTimeForCell(row, col);
 
-    // 예약 제한 확인
     if (!checkReservationLimit(name, effectiveTime, programs[col], reservations)) {
       alert("동일 시간대, 연속 예약 또는 최대 예약 수 초과입니다.");
       return;
     }
 
-    // Supabase에 추가
     const reservationData = {
       col,
       name,
@@ -286,9 +288,9 @@ const ReservationGrid: React.FC = () => {
       console.error("Error creating reservation:", error);
       alert("예약 생성 중 오류가 발생했습니다. 관리자에게 문의하세요.");
     } else if (data) {
-      // row를 로컬 상태에 반영 (낙관적 업데이트)
       data.row = row;
       const key = `${row}-${col}`;
+      // 낙관적 업데이트: local state에 바로 반영
       setReservations(prev => ({ ...prev, [key]: data }));
       alert(`${programs[col]} 프로그램은 ${effectiveTime}에 예약되었습니다.\n예약자: ${maskName(name)}\n인원수: ${people}명`);
     }
@@ -311,7 +313,7 @@ const ReservationGrid: React.FC = () => {
     setCancelCell({ row: adjustedRow, col });
   };
 
-  // 예약 취소 확인
+  // 예약 취소 확인 시
   const handleCancelConfirm = async () => {
     if (!cancelCell) return;
     const { row, col } = cancelCell;
@@ -336,7 +338,7 @@ const ReservationGrid: React.FC = () => {
     setCancelCell(null);
   };
 
-  // 헤더 더블클릭 시 프로그램 비활성/활성
+  // 헤더 더블클릭 시 프로그램 비활성/활성 전환
   const handleHeaderDoubleClick = (program: string) => {
     if (disabledPrograms.includes(program)) {
       setToggleProgramModal({ program, mode: 'enable' });
@@ -345,7 +347,7 @@ const ReservationGrid: React.FC = () => {
     }
   };
 
-  // 프로그램 비활성화 모달 확인
+  // 프로그램 비활성화/활성화 모달 확인 시
   const handleProgramToggleConfirm = async (mode: 'disable' | 'enable') => {
     if (!toggleProgramModal) return;
     const program = toggleProgramModal.program;
@@ -401,7 +403,6 @@ const ReservationGrid: React.FC = () => {
             <tr key={rowIndex}>
               <td className="time-cell">{time}</td>
               {programs.map((prog, colIndex) => {
-                // merged 프로그램이면, 홀수 행은 렌더링하지 않고 짝수 행만
                 if (mergedPrograms.includes(prog) && rowIndex % 2 === 1) {
                   return null;
                 }
