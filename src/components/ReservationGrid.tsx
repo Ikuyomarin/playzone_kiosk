@@ -178,12 +178,12 @@ const ReservationGrid: React.FC = () => {
     fetchDisabledPrograms();
   }, []);
 
-  // 매 1초마다 재검사 → "자정 지나면" 체크 & 예약 목록 갱신
+  // 매 10초마다 재검사 → "자정 지나면" 체크 & 예약 목록 갱신
   useEffect(() => {
     const interval = setInterval(() => {
       resetReservationsIfNewDay(); // 자정 자동 초기화
       fetchReservations();         // 최신 예약 정보 반영
-    }, 1000);
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -286,12 +286,10 @@ const ReservationGrid: React.FC = () => {
       console.error("Error creating reservation:", error);
       alert("예약 생성 중 오류가 발생했습니다. 관리자에게 문의하세요.");
     } else if (data) {
-      // row를 로컬 상태에 반영
+      // row를 로컬 상태에 반영 (낙관적 업데이트)
       data.row = row;
       const key = `${row}-${col}`;
       setReservations(prev => ({ ...prev, [key]: data }));
-      // 예약 생성 후 바로 최신 예약 데이터를 불러와 UI를 업데이트합니다.
-      await fetchReservations();
       alert(`${programs[col]} 프로그램은 ${effectiveTime}에 예약되었습니다.\n예약자: ${maskName(name)}\n인원수: ${people}명`);
     }
     setSelectedCell(null);
