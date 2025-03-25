@@ -25,9 +25,8 @@ const times = generateTimes();
 
 /**
  * effective_time과 program 정보를 통해 예약이 속한 행(row) 인덱스를 계산합니다.
- * merged 프로그램(노래방, 포켓볼)인 경우, 
- * "09:00 ~ 10:00" 같이 1시간짜리로 계산하여 
- * 시작 시간이 같은 첫 번째 셀의 인덱스를 사용.
+ * merged 프로그램(노래방, 포켓볼)인 경우, "09:00 ~ 10:00" 같이 1시간짜리로 계산하여
+ * 시작 시간이 같은 첫 번째 셀의 인덱스를 사용합니다.
  */
 const getRowFromEffectiveTime = (effectiveTime: string, program: string): number => {
   if (!mergedPrograms.includes(program)) {
@@ -105,25 +104,35 @@ interface ToggleModal {
 
 const ReservationGrid: React.FC = () => {
   /**
-   * 자정이 지나면 예약 테이블을 완전히 리셋하는 함수
-   * - Supabase 'reservations' 테이블 전체 삭제
-   * - localStorage에 마지막 리셋 날짜 저장 → 하루 한 번만 실행
+   * 자정이 지나면 Supabase의 reset_logs 테이블을 확인하여,
+   * 오늘 기록이 없으면 reservations 테이블을 리셋하고 reset_logs에 오늘 날짜를 기록합니다.
    */
   const resetReservationsIfNewDay = async () => {
     const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
-    const lastReset = localStorage.getItem("lastResetDate");
-
-    // 날짜가 다르면 새벽을 넘겼다고 판단
-    if (lastReset !== today) {
-      const { error } = await supabase
+    const { data: logs, error: logError } = await supabase
+      .from("reset_logs")
+      .select("*")
+      .eq("date", today);
+    if (logError) {
+      console.error("reset_logs 조회 오류:", logError.message);
+      return;
+    }
+    if (logs && logs.length === 0) {
+      const { error: deleteError } = await supabase
         .from("reservations")
         .delete()
-        .neq("id", 0); // 전체 삭제
-      if (!error) {
-        localStorage.setItem("lastResetDate", today);
-        console.log("자정이 지나 예약 데이터를 초기화했습니다.");
+        .neq("id", 0);
+      if (deleteError) {
+        console.error("예약 초기화 오류:", deleteError.message);
       } else {
-        console.error("초기화 오류:", error.message);
+        const { error: insertError } = await supabase
+          .from("reset_logs")
+          .insert({ date: today });
+        if (insertError) {
+          console.error("reset_logs 기록 오류:", insertError.message);
+        } else {
+          console.log("자정 예약 초기화 및 reset_logs 기록 완료:", today);
+        }
       }
     }
   };
@@ -137,52 +146,18 @@ const ReservationGrid: React.FC = () => {
   const [disabledPrograms, setDisabledPrograms] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  /**
-   * Supabase에서 예약 목록을 불러오는 함수
-   */
-  const fetchReservations = async () => {
-    const { data, error } = await supabase.from('reservations').select('*');
-    if (error) {
-      console.error('Error fetching reservations:', error);
-    } else if (data) {
-      const resMap: Record<string, Reservation> = {};
-      (data as any[]).forEach((r) => {
-        const computedRow = getRowFromEffectiveTime(r.effective_time, r.program);
-        const key = `${computedRow}-${r.col}`;
-        resMap[key] = r;
-      });
-      setReservations(resMap);
-    }
-  };
-
-  /**
-   * 비활성화된 프로그램 목록 불러오기
-   */
-  const fetchDisabledPrograms = async () => {
-    const { data, error } = await supabase
-      .from('disabled_programs')
-      .select('program');
-    if (error) {
-      console.error('Error fetching disabled programs:', error);
-    } else if (data) {
-      setDisabledPrograms(data.map((item: any) => item.program));
-    }
-  };
-
-  // 초기 실행 (컴포넌트 마운트 시)
+  // 초기 실행 (마운트 시): 자정 초기화 및 데이터 불러오기
   useEffect(() => {
-    // 자정 체크 → 초기화
     resetReservationsIfNewDay();
-    // 예약 데이터, 비활성화 데이터 가져오기
     fetchReservations();
     fetchDisabledPrograms();
   }, []);
 
-  // 매 10초마다 재검사 → "자정 지나면" 체크 & 예약 목록 갱신
+  // 매 10초마다 재검사: 자정 초기화 체크 및 예약 목록 갱신
   useEffect(() => {
     const interval = setInterval(() => {
-      resetReservationsIfNewDay(); // 자정 자동 초기화
-      fetchReservations();         // 최신 예약 정보 반영
+      resetReservationsIfNewDay();
+      fetchReservations();
     }, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -195,12 +170,36 @@ const ReservationGrid: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const fetchReservations = async () => {
+    const { data, error } = await supabase.from('reservations').select('*');
+    if (error) {
+      console.error('예약 데이터 불러오기 오류:', error);
+    } else if (data) {
+      const resMap: Record<string, Reservation> = {};
+      (data as any[]).forEach((r) => {
+        const computedRow = getRowFromEffectiveTime(r.effective_time, r.program);
+        const key = `${computedRow}-${r.col}`;
+        resMap[key] = r;
+      });
+      setReservations(resMap);
+    }
+  };
+
+  const fetchDisabledPrograms = async () => {
+    const { data, error } = await supabase.from('disabled_programs').select('program');
+    if (error) {
+      console.error('비활성화 프로그램 불러오기 오류:', error);
+    } else if (data) {
+      setDisabledPrograms(data.map((item: any) => item.program));
+    }
+  };
+
   const parseTimeRange = (timeStr: string): [string, string] => {
     const parts = timeStr.split(' ~ ');
     return [parts[0], parts[1]];
   };
 
-  // merged 프로그램인 경우, 홀수 행을 상위 짝수 행에 붙여서 1시간 단위로 표현
+  // merged 프로그램의 경우, 홀수 행이면 상위(짝수) 행으로 조정하여 1시간 단위로 표현
   const getEffectiveTimeForCell = (row: number, col: number): string => {
     const program = programs[col];
     let adjustedRow = row;
@@ -223,7 +222,6 @@ const ReservationGrid: React.FC = () => {
     return name[0] + "*" + name[name.length - 1];
   };
 
-  // 이미 지난 시간인지 판단 (UI에 만료 표시)
   const isExpired = (row: number, col: number): boolean => {
     const effectiveTime = getEffectiveTimeForCell(row, col);
     const [, endStr] = parseTimeRange(effectiveTime);
@@ -256,19 +254,17 @@ const ReservationGrid: React.FC = () => {
     setSelectedCell({ row: adjustedRow, col });
   };
 
-  // 예약 모달 확인 시
+  // 예약 모달 확인 시 (예약 생성 후 즉시 최신 데이터 반영)
   const handleReservationConfirm = async (name: string, people: number) => {
     if (!selectedCell) return;
     const { row, col } = selectedCell;
     const effectiveTime = getEffectiveTimeForCell(row, col);
 
-    // 예약 제한 확인
     if (!checkReservationLimit(name, effectiveTime, programs[col], reservations)) {
       alert("동일 시간대, 연속 예약 또는 최대 예약 수 초과입니다.");
       return;
     }
 
-    // Supabase에 추가
     const reservationData = {
       col,
       name,
@@ -283,13 +279,11 @@ const ReservationGrid: React.FC = () => {
       .single();
 
     if (error) {
-      console.error("Error creating reservation:", error);
+      console.error("예약 생성 오류:", error);
       alert("예약 생성 중 오류가 발생했습니다. 관리자에게 문의하세요.");
     } else if (data) {
-      // row를 로컬 상태에 반영 (낙관적 업데이트)
-      data.row = row;
-      const key = `${row}-${col}`;
-      setReservations(prev => ({ ...prev, [key]: data }));
+      // 예약 생성 직후 최신 데이터를 바로 불러와 UI 업데이트
+      await fetchReservations();
       alert(`${programs[col]} 프로그램은 ${effectiveTime}에 예약되었습니다.\n예약자: ${maskName(name)}\n인원수: ${people}명`);
     }
     setSelectedCell(null);
@@ -311,7 +305,7 @@ const ReservationGrid: React.FC = () => {
     setCancelCell({ row: adjustedRow, col });
   };
 
-  // 예약 취소 확인
+  // 예약 취소 확인 시
   const handleCancelConfirm = async () => {
     if (!cancelCell) return;
     const { row, col } = cancelCell;
@@ -325,7 +319,7 @@ const ReservationGrid: React.FC = () => {
       .eq('id', reservation.id);
 
     if (error) {
-      console.error("Error cancelling reservation:", error);
+      console.error("예약 취소 오류:", error);
       alert("예약 취소 중 오류가 발생했습니다.");
     } else {
       const updated = { ...reservations };
@@ -336,7 +330,7 @@ const ReservationGrid: React.FC = () => {
     setCancelCell(null);
   };
 
-  // 헤더 더블클릭 시 프로그램 비활성/활성
+  // 헤더 더블클릭 시 (프로그램 비활성/활성 토글)
   const handleHeaderDoubleClick = (program: string) => {
     if (disabledPrograms.includes(program)) {
       setToggleProgramModal({ program, mode: 'enable' });
@@ -345,29 +339,23 @@ const ReservationGrid: React.FC = () => {
     }
   };
 
-  // 프로그램 비활성화 모달 확인
+  // 프로그램 비활성화/활성 토글 확인 시
   const handleProgramToggleConfirm = async (mode: 'disable' | 'enable') => {
     if (!toggleProgramModal) return;
     const program = toggleProgramModal.program;
-
     if (mode === 'disable') {
-      const { error } = await supabase
-        .from('disabled_programs')
-        .insert({ program });
+      const { error } = await supabase.from('disabled_programs').insert({ program });
       if (error) {
-        console.error('Error disabling program:', error);
+        console.error('프로그램 비활성화 오류:', error);
         alert("프로그램 비활성화 중 오류가 발생했습니다.");
       } else {
         setDisabledPrograms(prev => [...prev, program]);
         alert(`${program} 프로그램이 비활성화되었습니다.`);
       }
     } else {
-      const { error } = await supabase
-        .from('disabled_programs')
-        .delete()
-        .eq('program', program);
+      const { error } = await supabase.from('disabled_programs').delete().eq('program', program);
       if (error) {
-        console.error('Error enabling program:', error);
+        console.error('프로그램 활성화 오류:', error);
         alert("프로그램 활성화 중 오류가 발생했습니다.");
       } else {
         setDisabledPrograms(prev => prev.filter(p => p !== program));
@@ -387,10 +375,7 @@ const ReservationGrid: React.FC = () => {
           <tr>
             <th className="time-header">시간</th>
             {programs.map((prog, colIndex) => (
-              <th 
-                key={colIndex} 
-                onDoubleClick={() => handleHeaderDoubleClick(prog)}
-              >
+              <th key={colIndex} onDoubleClick={() => handleHeaderDoubleClick(prog)}>
                 {prog} {disabledPrograms.includes(prog) ? "(비활성화)" : ""}
               </th>
             ))}
@@ -401,14 +386,10 @@ const ReservationGrid: React.FC = () => {
             <tr key={rowIndex}>
               <td className="time-cell">{time}</td>
               {programs.map((prog, colIndex) => {
-                // merged 프로그램이면, 홀수 행은 렌더링하지 않고 짝수 행만
-                if (mergedPrograms.includes(prog) && rowIndex % 2 === 1) {
-                  return null;
-                }
+                if (mergedPrograms.includes(prog) && rowIndex % 2 === 1) return null;
                 const key = `${rowIndex}-${colIndex}`;
                 const reservation = reservations[key];
                 const expired = isExpired(rowIndex, colIndex);
-
                 return (
                   <td
                     key={colIndex}
