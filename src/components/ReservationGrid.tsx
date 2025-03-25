@@ -153,12 +153,12 @@ const ReservationGrid: React.FC = () => {
     fetchDisabledPrograms();
   }, []);
 
-  // 매 10초마다 재검사: 자정 초기화 체크 및 예약 목록 갱신
+  // 매 1초마다 재검사: 자정 초기화 체크 및 예약 목록 갱신
   useEffect(() => {
     const interval = setInterval(() => {
       resetReservationsIfNewDay();
       fetchReservations();
-    }, 10000);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
