@@ -80,7 +80,7 @@
   z-index: 2;
 }
 
-/* 추가: 비활성화된 시간대 셀 스타일 (전체 행에 적용) */
+/* 추가: 비활성화된 시간대 셀 스타일 */
 .disabled-time {
   background: repeating-linear-gradient(
     45deg,
@@ -89,5 +89,5 @@
     #FFFFFF 10px,
     #FFFFFF 20px
   );
-  pointer-events: none;
+  /* pointer-events 제거하여 더블클릭 이벤트 허용 */
 }

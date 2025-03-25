@@ -112,11 +112,13 @@ const ReservationGrid: React.FC = () => {
       return;
     }
     if (disabledTimes.includes(time)) {
+      // 활성화: 삭제
       const { error } = await supabase.from('disabled_times').delete().eq('time', time);
       if (error) {
         alert("시간대 활성화 중 오류가 발생했습니다.");
       }
     } else {
+      // 비활성화: 삽입
       const { error } = await supabase.from('disabled_times').insert({ time });
       if (error) {
         alert("시간대 비활성화 중 오류가 발생했습니다.");
@@ -161,9 +163,7 @@ const ReservationGrid: React.FC = () => {
 
   /**
    * 만료된 예약 자동 삭제 함수
-   * - 일반 프로그램(30분 단위)은 종료 시각이 지난 예약 삭제\n
-   * - 노래방/포켓볼(1시간 단위)은 종료 시각(예: 13:00)이 지난 예약 삭제\n
-   * effective_time의 종료 시각이 기준입니다.
+   * - 일반 프로그램(30분)과 노래방/포켓볼(1시간)은 effective_time의 종료 시각 기준으로 삭제
    */
   const cleanUpExpiredReservations = async () => {
     const now = new Date();
@@ -303,7 +303,7 @@ const ReservationGrid: React.FC = () => {
       adjustedRow = row - 1;
     }
     const key = `${adjustedRow}-${col}`;
-    // 추가: 해당 시간대가 비활성화되었는지 검사 (disabledTimes 배열 기준)
+    // 해당 시간대가 비활성화되었는지 검사 (disabledTimes 배열 기준)
     const cellTime = times[adjustedRow];
     if (disabledTimes.includes(cellTime)) {
       alert("해당 시간대는 비활성화되었습니다.");
