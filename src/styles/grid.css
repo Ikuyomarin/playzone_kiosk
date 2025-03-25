@@ -76,11 +76,11 @@
 .reservation-grid thead th {
   position: sticky;
   top: 0;
-  background-color: #fff; /* 원하는 배경색 */
+  background-color: #fff;
   z-index: 2;
 }
 
-/* 추가: 비활성화된 시간대 셀 스타일 */
+/* 추가: 비활성화된 시간대 셀 스타일 (전체 행에 적용) */
 .disabled-time {
   background: repeating-linear-gradient(
     45deg,

@@ -12,7 +12,7 @@ const programs = [
 ];
 const mergedPrograms = ["노래방A", "노래방B", "포켓볼"];
 
-// 09:00 ~ 09:30, 09:30 ~ 10:00, … (9시 ~ 21시까지) 형태의 시간대 배열 생성
+// 09:00 ~ 09:30, 09:30 ~ 10:00, … (9시부터 21시까지) 형태의 시간대 배열 생성
 const generateTimes = (): string[] => {
   const times: string[] = [];
   for (let h = 9; h < 21; h++) {
@@ -25,8 +25,7 @@ const times = generateTimes();
 
 /**
  * effective_time과 program 정보를 통해 예약이 속한 행(row) 인덱스를 계산합니다.
- * merged 프로그램(노래방, 포켓볼)인 경우, "09:00 ~ 10:00" 같이 1시간짜리로 계산하여
- * 시작 시간이 같은 첫 번째 셀의 인덱스를 사용합니다.
+ * merged 프로그램(노래방, 포켓볼)은 1시간짜리로 계산하여 시작 시간이 같은 첫 번째 셀의 인덱스를 사용합니다.
  */
 const getRowFromEffectiveTime = (effectiveTime: string, program: string): number => {
   if (!mergedPrograms.includes(program)) {
@@ -96,7 +95,7 @@ interface ToggleModal {
 }
 
 const ReservationGrid: React.FC = () => {
-  // --- 좌측 시간대 비활성화 관련 상태 및 함수 추가 ---
+  // --- 좌측 시간대 비활성화 관련 상태 및 함수 ---
   const [disabledTimes, setDisabledTimes] = useState<string[]>([]);
   const fetchDisabledTimes = async () => {
     const { data, error } = await supabase.from('disabled_times').select('time');
@@ -107,7 +106,6 @@ const ReservationGrid: React.FC = () => {
     }
   };
   const handleTimeCellDoubleClick = async (time: string) => {
-    // 관리자 비밀번호 확인 (여기서는 간단하게 prompt 사용)
     const entered = window.prompt("관리자 비밀번호를 입력하세요:");
     if (entered !== "0924") {
       alert("비밀번호가 틀렸습니다.");
@@ -305,7 +303,7 @@ const ReservationGrid: React.FC = () => {
       adjustedRow = row - 1;
     }
     const key = `${adjustedRow}-${col}`;
-    // 추가: 해당 시간대가 비활성화되었는지 검사
+    // 추가: 해당 시간대가 비활성화되었는지 검사 (disabledTimes 배열 기준)
     const cellTime = times[adjustedRow];
     if (disabledTimes.includes(cellTime)) {
       alert("해당 시간대는 비활성화되었습니다.");
@@ -464,7 +462,7 @@ const ReservationGrid: React.FC = () => {
                   <td
                     key={colIndex}
                     rowSpan={mergedPrograms.includes(prog) ? 2 : 1}
-                    className={`grid-cell ${reservation ? 'reserved' : ''} ${disabledPrograms.includes(prog) ? 'disabled' : ''} ${expired ? 'expired' : ''}`}
+                    className={`grid-cell ${reservation ? 'reserved' : ''} ${disabledPrograms.includes(prog) ? 'disabled' : ''} ${expired ? 'expired' : ''} ${disabledTimes.includes(times[rowIndex]) ? 'disabled-time' : ''}`}
                     onClick={() => handleCellClick(rowIndex, colIndex)}
                     onContextMenu={(e) => handleCellRightClick(rowIndex, colIndex, e)}
                   >
