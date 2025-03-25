@@ -12,10 +12,10 @@ const programs = [
 ];
 const mergedPrograms = ["노래방A", "노래방B", "포켓볼"];
 
-// "09:00 ~ 09:30", "09:30 ~ 10:00", … 형태의 시간대 배열 생성
+// "09:00 ~ 09:30", "09:30 ~ 10:00", … 형태의 시간대 배열 생성 (9시 ~ 21시까지)
 const generateTimes = (): string[] => {
   const times: string[] = [];
-  for (let h = 9; h < 20; h++) {
+  for (let h = 9; h < 21; h++) {
     times.push(`${String(h).padStart(2, '0')}:00 ~ ${String(h).padStart(2, '0')}:30`);
     times.push(`${String(h).padStart(2, '0')}:30 ~ ${String(h + 1).padStart(2, '0')}:00`);
   }
@@ -41,9 +41,6 @@ const getRowFromEffectiveTime = (effectiveTime: string, program: string): number
 
 /**
  * 예약 제한 체크 함수
- * - 동일 이름 사용자는 최대 2건 예약
- * - 예약 시간이 겹치거나 바로 인접하면 안 됨
- * - 노래방/레이싱 그룹은 각각 한 건만 허용
  */
 const checkReservationLimit = (
   name: string,
@@ -63,11 +60,9 @@ const checkReservationLimit = (
       const [resStartStr, resEndStr] = res.effective_time.split(' ~ ');
       const resStart = parseInt(resStartStr.split(':')[0]) * 60 + parseInt(resStartStr.split(':')[1]);
       const resEnd = parseInt(resEndStr.split(':')[0]) * 60 + parseInt(resEndStr.split(':')[1]);
-      // 시간이 겹치면 안 됨
       if (!(newEnd <= resStart || resEnd <= newStart)) {
         return false;
       }
-      // 같은 프로그램이면 인접 예약도 안 됨
       if (res.program === currentProgram && (newStart === resEnd || newEnd === resStart)) {
         return false;
       }
@@ -101,12 +96,39 @@ interface ToggleModal {
 }
 
 const ReservationGrid: React.FC = () => {
+  // --- 추가: 좌측 시간대 비활성화 관련 상태 및 함수 ---
+  const [disabledTimes, setDisabledTimes] = useState<string[]>([]);
+  const fetchDisabledTimes = async () => {
+    const { data, error } = await supabase.from('disabled_times').select('time');
+    if (error) {
+      console.error("비활성화 시간대 불러오기 오류:", error.message);
+    } else if (data) {
+      setDisabledTimes(data.map((item: any) => item.time));
+    }
+  };
+  const handleTimeCellDoubleClick = async (time: string) => {
+    if (disabledTimes.includes(time)) {
+      // 활성화: 삭제
+      const { error } = await supabase.from('disabled_times').delete().eq('time', time);
+      if (error) {
+        alert("시간대 활성화 중 오류가 발생했습니다.");
+      }
+    } else {
+      // 비활성화: 삽입
+      const { error } = await supabase.from('disabled_times').insert({ time });
+      if (error) {
+        alert("시간대 비활성화 중 오류가 발생했습니다.");
+      }
+    }
+    fetchDisabledTimes();
+  };
+  // --- 여기까지 추가 ---
+
   /**
-   * 자정이 지나면 Supabase의 reset_logs 테이블을 확인하여,
-   * 오늘 기록이 없으면 reservations 테이블을 리셋하고 reset_logs에 오늘 날짜를 기록합니다.
+   * 자정 초기화: reset_logs 테이블을 기준으로 하루에 한 번만 초기화
    */
   const resetReservationsIfNewDay = async () => {
-    const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+    const today = new Date().toISOString().split("T")[0];
     const { data: logs, error: logError } = await supabase
       .from("reset_logs")
       .select("*")
@@ -136,8 +158,8 @@ const ReservationGrid: React.FC = () => {
   };
 
   /**
-   * 만료된 예약을 자동 삭제하는 함수
-   * - 일반 프로그램(30분 단위)은 종료 시각이 지난 예약 삭제\n   - 노래방/포켓볼(1시간 단위)은 종료 시각이 지난 예약 삭제\n   * effective_time에 저장된 종료 시간이 기준입니다.
+   * 만료 예약 자동 삭제 함수
+   * - 일반 프로그램(30분)과 노래방/포켓볼(1시간)은 effective_time의 종료 시각 기준으로 삭제
    */
   const cleanUpExpiredReservations = async () => {
     const now = new Date();
@@ -149,7 +171,6 @@ const ReservationGrid: React.FC = () => {
     }
     const expiredIds: number[] = [];
     (data as any[]).forEach((r) => {
-      // r.effective_time: 예) "12:00 ~ 12:30" (일반) 또는 "12:00 ~ 13:00" (노래방/포켓볼)
       const [, endStr] = r.effective_time.split(" ~ ");
       const endMinutes = parseInt(endStr.split(":")[0]) * 60 + parseInt(endStr.split(":")[1]);
       if (nowMinutes >= endMinutes) {
@@ -175,11 +196,12 @@ const ReservationGrid: React.FC = () => {
   const [disabledPrograms, setDisabledPrograms] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 컴포넌트 마운트 시 초기 실행: 자정 초기화 및 데이터 불러오기
+  // 컴포넌트 마운트 시 초기 실행: 자정 초기화, 예약, 비활성화, 시간대 비활성화 데이터 불러오기
   useEffect(() => {
     resetReservationsIfNewDay();
     fetchReservations();
     fetchDisabledPrograms();
+    fetchDisabledTimes();
   }, []);
 
   // 매 1초마다 예약 데이터와 현재 시간 업데이트, 자정 초기화 체크
@@ -196,8 +218,16 @@ const ReservationGrid: React.FC = () => {
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       cleanUpExpiredReservations();
-    }, 6000);
+    }, 60000);
     return () => clearInterval(cleanupInterval);
+  }, []);
+
+  // 매 10초마다 비활성화된 시간대 업데이트 (옵션)
+  useEffect(() => {
+    const dtInterval = setInterval(() => {
+      fetchDisabledTimes();
+    }, 10000);
+    return () => clearInterval(dtInterval);
   }, []);
 
   const fetchReservations = async () => {
@@ -269,6 +299,12 @@ const ReservationGrid: React.FC = () => {
       adjustedRow = row - 1;
     }
     const key = `${adjustedRow}-${col}`;
+    // 추가: 해당 행(시간대)가 비활성화되었는지 검사
+    const cellTime = times[adjustedRow];
+    if (disabledTimes.includes(cellTime)) {
+      alert("해당 시간대는 비활성화되었습니다.");
+      return;
+    }
     if (disabledPrograms.includes(program)) {
       alert("해당 프로그램은 비활성화되어 예약이 불가능합니다.");
       return;
@@ -407,7 +443,13 @@ const ReservationGrid: React.FC = () => {
         <tbody>
           {times.map((time, rowIndex) => (
             <tr key={rowIndex}>
-              <td className="time-cell">{time}</td>
+              {/* 시간 셀에 onDoubleClick 추가: 시간대 비활성화 토글 */}
+              <td
+                className={`time-cell ${disabledTimes.includes(time) ? 'disabled-time' : ''}` }
+                onDoubleClick={() => handleTimeCellDoubleClick(time)}
+              >
+                {time}
+              </td>
               {programs.map((prog, colIndex) => {
                 if (mergedPrograms.includes(prog) && rowIndex % 2 === 1) return null;
                 const key = `${rowIndex}-${colIndex}`;
