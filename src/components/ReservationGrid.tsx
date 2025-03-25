@@ -74,7 +74,6 @@ const checkReservationLimit = (
     }
   }
 
-  // 노래방 그룹은 한 번만 예약 가능
   if (currentProgram === "노래방A" || currentProgram === "노래방B") {
     for (const key in reservations) {
       const res = reservations[key];
@@ -83,7 +82,6 @@ const checkReservationLimit = (
       }
     }
   }
-  // 레이싱 그룹은 한 번만 예약 가능
   if (currentProgram === "레이싱게임A" || currentProgram === "레이싱게임B") {
     for (const key in reservations) {
       const res = reservations[key];
@@ -137,37 +135,69 @@ const ReservationGrid: React.FC = () => {
     }
   };
 
-  // 예약 로컬 상태
+  /**
+   * 만료된 예약을 자동 삭제하는 함수
+   * - 일반 프로그램(30분 단위)은 종료 시각이 지난 예약 삭제\n   - 노래방/포켓볼(1시간 단위)은 종료 시각이 지난 예약 삭제\n   * effective_time에 저장된 종료 시간이 기준입니다.
+   */
+  const cleanUpExpiredReservations = async () => {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const { data, error } = await supabase.from('reservations').select('*');
+    if (error || !data) {
+      console.error("예약 데이터 불러오기 오류 (만료 삭제 전):", error);
+      return;
+    }
+    const expiredIds: number[] = [];
+    (data as any[]).forEach((r) => {
+      // r.effective_time: 예) "12:00 ~ 12:30" (일반) 또는 "12:00 ~ 13:00" (노래방/포켓볼)
+      const [, endStr] = r.effective_time.split(" ~ ");
+      const endMinutes = parseInt(endStr.split(":")[0]) * 60 + parseInt(endStr.split(":")[1]);
+      if (nowMinutes >= endMinutes) {
+        expiredIds.push(r.id);
+      }
+    });
+    if (expiredIds.length > 0) {
+      const { error: deleteError } = await supabase.from('reservations').delete().in('id', expiredIds);
+      if (deleteError) {
+        console.error("만료 예약 삭제 오류:", deleteError.message);
+      } else {
+        console.log(`만료된 ${expiredIds.length}건의 예약 삭제 완료`);
+        fetchReservations();
+      }
+    }
+  };
+
+  // 상태 선언
   const [reservations, setReservations] = useState<Record<string, Reservation>>({});
-  // UI 상태
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const [cancelCell, setCancelCell] = useState<{ row: number; col: number } | null>(null);
   const [toggleProgramModal, setToggleProgramModal] = useState<ToggleModal | null>(null);
   const [disabledPrograms, setDisabledPrograms] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 초기 실행 (마운트 시): 자정 초기화 및 데이터 불러오기
+  // 컴포넌트 마운트 시 초기 실행: 자정 초기화 및 데이터 불러오기
   useEffect(() => {
     resetReservationsIfNewDay();
     fetchReservations();
     fetchDisabledPrograms();
   }, []);
 
-  // 매 1초마다 재검사: 자정 초기화 체크 및 예약 목록 갱신
+  // 매 1초마다 예약 데이터와 현재 시간 업데이트, 자정 초기화 체크
   useEffect(() => {
     const interval = setInterval(() => {
       resetReservationsIfNewDay();
       fetchReservations();
+      setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // 1초마다 현재 시간 업데이트 (UI 표시용)
+  // 매 1분마다 만료된 예약 자동 삭제
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
+    const cleanupInterval = setInterval(() => {
+      cleanUpExpiredReservations();
+    }, 60000);
+    return () => clearInterval(cleanupInterval);
   }, []);
 
   const fetchReservations = async () => {
@@ -259,12 +289,10 @@ const ReservationGrid: React.FC = () => {
     if (!selectedCell) return;
     const { row, col } = selectedCell;
     const effectiveTime = getEffectiveTimeForCell(row, col);
-
     if (!checkReservationLimit(name, effectiveTime, programs[col], reservations)) {
       alert("동일 시간대, 연속 예약 또는 최대 예약 수 초과입니다.");
       return;
     }
-
     const reservationData = {
       col,
       name,
@@ -272,17 +300,14 @@ const ReservationGrid: React.FC = () => {
       program: programs[col],
       effective_time: effectiveTime,
     };
-
     const { data, error } = await supabase
       .from('reservations')
       .insert(reservationData)
       .single();
-
     if (error) {
       console.error("예약 생성 오류:", error);
       alert("예약 생성 중 오류가 발생했습니다. 관리자에게 문의하세요.");
     } else if (data) {
-      // 예약 생성 직후 최신 데이터를 바로 불러와 UI 업데이트
       await fetchReservations();
       alert(`${programs[col]} 프로그램은 ${effectiveTime}에 예약되었습니다.\n예약자: ${maskName(name)}\n인원수: ${people}명`);
     }
@@ -312,12 +337,10 @@ const ReservationGrid: React.FC = () => {
     const key = `${row}-${col}`;
     const reservation = reservations[key];
     if (!reservation) return;
-
     const { error } = await supabase
       .from('reservations')
       .delete()
       .eq('id', reservation.id);
-
     if (error) {
       console.error("예약 취소 오류:", error);
       alert("예약 취소 중 오류가 발생했습니다.");
