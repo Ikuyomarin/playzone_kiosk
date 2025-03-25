@@ -12,7 +12,7 @@ const programs = [
 ];
 const mergedPrograms = ["노래방A", "노래방B", "포켓볼"];
 
-// "09:00 ~ 09:30", "09:30 ~ 10:00", … 형태의 시간대 배열 생성 (9시 ~ 21시까지)
+// "09:00 ~ 09:30", "09:30 ~ 10:00", … 형태의 시간대 배열 생성 (9시 ~ 21시)
 const generateTimes = (): string[] => {
   const times: string[] = [];
   for (let h = 9; h < 21; h++) {
@@ -96,7 +96,7 @@ interface ToggleModal {
 }
 
 const ReservationGrid: React.FC = () => {
-  // --- 추가: 좌측 시간대 비활성화 관련 상태 및 함수 ---
+  // --- 좌측 시간대 비활성화 관련 상태 및 함수 추가 ---
   const [disabledTimes, setDisabledTimes] = useState<string[]>([]);
   const fetchDisabledTimes = async () => {
     const { data, error } = await supabase.from('disabled_times').select('time');
@@ -107,14 +107,14 @@ const ReservationGrid: React.FC = () => {
     }
   };
   const handleTimeCellDoubleClick = async (time: string) => {
+    // 관리자 비밀번호 확인 로직은 여기에 추가할 수 있습니다 (예: 모달 오픈)
+    // 여기서는 간단하게 바로 토글하는 것으로 가정합니다.
     if (disabledTimes.includes(time)) {
-      // 활성화: 삭제
       const { error } = await supabase.from('disabled_times').delete().eq('time', time);
       if (error) {
         alert("시간대 활성화 중 오류가 발생했습니다.");
       }
     } else {
-      // 비활성화: 삽입
       const { error } = await supabase.from('disabled_times').insert({ time });
       if (error) {
         alert("시간대 비활성화 중 오류가 발생했습니다.");
@@ -158,8 +158,10 @@ const ReservationGrid: React.FC = () => {
   };
 
   /**
-   * 만료 예약 자동 삭제 함수
-   * - 일반 프로그램(30분)과 노래방/포켓볼(1시간)은 effective_time의 종료 시각 기준으로 삭제
+   * 만료된 예약 자동 삭제 함수
+   * - 일반 프로그램(30분 단위)은 종료 시각이 지난 예약 삭제\n
+   * - 노래방/포켓볼(1시간 단위)은 종료 시각(예: 13:00)이 지난 예약 삭제\n
+   * effective_time의 종료 시각이 기준입니다.
    */
   const cleanUpExpiredReservations = async () => {
     const now = new Date();
@@ -196,7 +198,7 @@ const ReservationGrid: React.FC = () => {
   const [disabledPrograms, setDisabledPrograms] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 컴포넌트 마운트 시 초기 실행: 자정 초기화, 예약, 비활성화, 시간대 비활성화 데이터 불러오기
+  // 컴포넌트 마운트 시 초기 실행: 자정 초기화 및 데이터 불러오기
   useEffect(() => {
     resetReservationsIfNewDay();
     fetchReservations();
@@ -299,7 +301,7 @@ const ReservationGrid: React.FC = () => {
       adjustedRow = row - 1;
     }
     const key = `${adjustedRow}-${col}`;
-    // 추가: 해당 행(시간대)가 비활성화되었는지 검사
+    // 추가: 해당 시간대가 비활성화되었는지 검사 (disabledTimes 배열 기준)
     const cellTime = times[adjustedRow];
     if (disabledTimes.includes(cellTime)) {
       alert("해당 시간대는 비활성화되었습니다.");
@@ -443,9 +445,9 @@ const ReservationGrid: React.FC = () => {
         <tbody>
           {times.map((time, rowIndex) => (
             <tr key={rowIndex}>
-              {/* 시간 셀에 onDoubleClick 추가: 시간대 비활성화 토글 */}
+              {/* 시간 셀에 onDoubleClick 이벤트를 추가하여 비활성화/활성화 토글 */}
               <td
-                className={`time-cell ${disabledTimes.includes(time) ? 'disabled-time' : ''}` }
+                className={`time-cell ${disabledTimes.includes(time) ? 'disabled-time' : ''}`}
                 onDoubleClick={() => handleTimeCellDoubleClick(time)}
               >
                 {time}
