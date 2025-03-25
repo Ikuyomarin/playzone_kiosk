@@ -12,7 +12,7 @@ const programs = [
 ];
 const mergedPrograms = ["노래방A", "노래방B", "포켓볼"];
 
-// "09:00 ~ 09:30", "09:30 ~ 10:00", … 형태의 시간대 배열 생성 (9시 ~ 21시)
+// 09:00 ~ 09:30, 09:30 ~ 10:00, … (9시 ~ 21시까지) 형태의 시간대 배열 생성
 const generateTimes = (): string[] => {
   const times: string[] = [];
   for (let h = 9; h < 21; h++) {
@@ -107,8 +107,12 @@ const ReservationGrid: React.FC = () => {
     }
   };
   const handleTimeCellDoubleClick = async (time: string) => {
-    // 관리자 비밀번호 확인 로직은 여기에 추가할 수 있습니다 (예: 모달 오픈)
-    // 여기서는 간단하게 바로 토글하는 것으로 가정합니다.
+    // 관리자 비밀번호 확인 (여기서는 간단하게 prompt 사용)
+    const entered = window.prompt("관리자 비밀번호를 입력하세요:");
+    if (entered !== "0924") {
+      alert("비밀번호가 틀렸습니다.");
+      return;
+    }
     if (disabledTimes.includes(time)) {
       const { error } = await supabase.from('disabled_times').delete().eq('time', time);
       if (error) {
@@ -198,7 +202,7 @@ const ReservationGrid: React.FC = () => {
   const [disabledPrograms, setDisabledPrograms] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 컴포넌트 마운트 시 초기 실행: 자정 초기화 및 데이터 불러오기
+  // 컴포넌트 마운트 시 초기 실행: 자정 초기화 및 데이터 불러오기 (예약, 프로그램, 시간대)
   useEffect(() => {
     resetReservationsIfNewDay();
     fetchReservations();
@@ -224,7 +228,7 @@ const ReservationGrid: React.FC = () => {
     return () => clearInterval(cleanupInterval);
   }, []);
 
-  // 매 10초마다 비활성화된 시간대 업데이트 (옵션)
+  // 매 10초마다 비활성화된 시간대 업데이트
   useEffect(() => {
     const dtInterval = setInterval(() => {
       fetchDisabledTimes();
@@ -301,7 +305,7 @@ const ReservationGrid: React.FC = () => {
       adjustedRow = row - 1;
     }
     const key = `${adjustedRow}-${col}`;
-    // 추가: 해당 시간대가 비활성화되었는지 검사 (disabledTimes 배열 기준)
+    // 추가: 해당 시간대가 비활성화되었는지 검사
     const cellTime = times[adjustedRow];
     if (disabledTimes.includes(cellTime)) {
       alert("해당 시간대는 비활성화되었습니다.");
@@ -445,7 +449,6 @@ const ReservationGrid: React.FC = () => {
         <tbody>
           {times.map((time, rowIndex) => (
             <tr key={rowIndex}>
-              {/* 시간 셀에 onDoubleClick 이벤트를 추가하여 비활성화/활성화 토글 */}
               <td
                 className={`time-cell ${disabledTimes.includes(time) ? 'disabled-time' : ''}`}
                 onDoubleClick={() => handleTimeCellDoubleClick(time)}
