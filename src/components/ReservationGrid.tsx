@@ -196,7 +196,7 @@ const ReservationGrid: React.FC = () => {
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       cleanUpExpiredReservations();
-    }, 60000);
+    }, 6000);
     return () => clearInterval(cleanupInterval);
   }, []);
 
