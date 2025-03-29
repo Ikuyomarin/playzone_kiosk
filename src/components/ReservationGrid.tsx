@@ -280,10 +280,9 @@ const ReservationGrid: React.FC = () => {
     return time;
   };
 
-  // 이름 마스킹 (예: "홍길동" -> "홍*동")
+  // 이름 마스킹 제거: 이름 그대로 반환
   const maskName = (name: string): string => {
-    if (name.length <= 1) return name;
-    return name[0] + "*" + name[name.length - 1];
+    return name;
   };
 
   const isExpired = (row: number, col: number): boolean => {
@@ -469,7 +468,7 @@ const ReservationGrid: React.FC = () => {
                     {reservation ? (
                       <div className="cell-content">
                         예약중<br />
-                        예약자: {maskName(reservation.name)}<br />
+                        예약자: {reservation.name}<br />
                         인원수: {reservation.people}명<br />
                         시간: {reservation.effective_time}
                       </div>
